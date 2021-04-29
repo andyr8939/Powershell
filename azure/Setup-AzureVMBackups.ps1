@@ -7,14 +7,39 @@
 $mySubscription = "123456789-1234-1234-1234-123456789"
 $myLocation = "australiaeast"
 $myClient = "myclient"
-$environment = "test"
-$myRSG = "$environment-$myLocation-$myClient"
-$myBackupVaultName = "$environment-$myLocation-$myClient-backup-vault"
+$myEnvironment = "test"
+$myRSG = "$myEnvironment-$myLocation-$myClient"
+$myBackupVaultName = "$myEnvironment-$myLocation-$myClient-backup-vault"
 $myBackupTime = Get-Date -Date "2021-02-1 22:00:00Z" # This gets converted to UTC for local 1am
 ########################################################################################
 # Set your Global Details Here
-$backup_policy_name = "MyBackupPolicy"
-$sql_backup_policy_name = "MySQLBackupPolicy"
+$myBackupPolicyName = "MyBackupPolicy"
+$mySQLBackupPolicyName = "MySQLBackupPolicy"
+
+# VM Backup Cycle
+$DailyBackupCount = 7
+$WeeklyBackupCount = 4
+$MonthlyBackupCount = 12
+$YearlyBackupCount = 2
+$MonthlyDayOfWeek = "Sunday"
+$MonthlyWeek = "Last"
+$YearlyMonth = "January"
+
+# SQL in VM Specific Cycle
+$sqlFullBackupFrequency = "Weekly"
+$sqlFullBackupFrequencyDay = "Sunday"
+$sqlFullBackupWeekOfMonth = "First"
+$sqlWeeklyCount = "4"
+$sqlMonthlyCount = "12"
+$sqlYearlyCount = "2"
+$sqlYearlyMonth = "January"
+
+$sqlDifferentialEnabled = "True"
+$sqlLogBackupEnabled = "True"
+$sqlLogRetentionCycle = "Days"
+$sqlLogRetentionCount = "7"
+$sqlLogBackupFrequencyMins = "120" # Take Log Backup every 2 hours
+
 ########################################################################################
 
 # Set Azure Context
@@ -40,29 +65,29 @@ Get-AzRecoveryServicesVault -Name $myBackupVaultName -ResourceGroupName $myRSG |
 $targetVault = Get-AzRecoveryServicesVault -ResourceGroupName $myRSG -Name $myBackupVaultName
 
 # Set Values for the Protection Policy
-$backup_policy_name = $backup_policy_name
+$myBackupPolicyName = $myBackupPolicyName
 $schPol = Get-AzRecoveryServicesBackupSchedulePolicyObject -WorkloadType "AzureVM"
 $UtcTime = $myBackupTime.ToUniversalTime()
 $schpol.ScheduleRunTimes[0] = $UtcTime
 
 # Create the Protection Policy
 $retPol = Get-AzRecoveryServicesBackupRetentionPolicyObject -WorkloadType "AzureVM"
-New-AzRecoveryServicesBackupProtectionPolicy -Name $backup_policy_name -WorkloadType "AzureVM" -RetentionPolicy $retPol -SchedulePolicy $schPol
+New-AzRecoveryServicesBackupProtectionPolicy -Name $myBackupPolicyName -WorkloadType "AzureVM" -RetentionPolicy $retPol -SchedulePolicy $schPol
 
 # Modify protection policy now its in place
-$retPol.DailySchedule.DurationCountInDays = 7
-$retPol.WeeklySchedule.DurationCountInWeeks = 4
-$retPol.MonthlySchedule.DurationCountInMonths = 12
-$retPol.MonthlySchedule.RetentionScheduleWeekly.DaysOfTheWeek = "Sunday"
-$retPol.MonthlySchedule.RetentionScheduleWeekly.WeeksOfTheMonth = "Last"
-$retPol.YearlySchedule.DurationCountInYears = 2
-$retPol.YearlySchedule.MonthsOfYear = "January"
-$pol = Get-AzRecoveryServicesBackupProtectionPolicy -Name $backup_policy_name
+$retPol.DailySchedule.DurationCountInDays = $DailyBackupCount
+$retPol.WeeklySchedule.DurationCountInWeeks = $WeeklyBackupCount
+$retPol.MonthlySchedule.DurationCountInMonths = $MonthlyBackupCount
+$retPol.MonthlySchedule.RetentionScheduleWeekly.DaysOfTheWeek = $MonthlyDayOfWeek
+$retPol.MonthlySchedule.RetentionScheduleWeekly.WeeksOfTheMonth = $MonthlyWeek
+$retPol.YearlySchedule.DurationCountInYears = $YearlyBackupCount
+$retPol.YearlySchedule.MonthsOfYear = $YearlyMonth
+$pol = Get-AzRecoveryServicesBackupProtectionPolicy -Name $myBackupPolicyName
 Set-AzRecoveryServicesBackupProtectionPolicy -RetentionPolicy $RetPol -Policy $pol -SchedulePolicy $schPol
 
 # Enable Protection for each VM
 foreach ($vm in $VMs) {
-    $pol = Get-AzRecoveryServicesBackupProtectionPolicy -Name $backup_policy_name
+    $pol = Get-AzRecoveryServicesBackupProtectionPolicy -Name $myBackupPolicyName
     Enable-AzRecoveryServicesBackupProtection -Policy $pol -Name $vm.Name -ResourceGroupName $myRSG
 }
 
@@ -76,27 +101,25 @@ $sqlUtcTime = $SQLmyBackupTime.ToUniversalTime()
 $sqlschpol.FullBackupSchedulePolicy.ScheduleRunTimes[0] = $sqlUtcTime
 $sqlschpol.DifferentialBackupSchedulePolicy.ScheduleRunTimes[0] = $sqlUtcTime
 $sqlschpol.IsCompression = $NULL
-$sqlschpol.FullBackupSchedulePolicy.ScheduleRunFrequency = "Weekly"
-$sqlschpol.FullBackupSchedulePolicy.ScheduleRunDays = "Sunday"
+$sqlschpol.FullBackupSchedulePolicy.ScheduleRunFrequency = $sqlFullBackupFrequency
+$sqlschpol.FullBackupSchedulePolicy.ScheduleRunDays = $sqlFullBackupFrequencyDay
 $sqlschpol.FullBackupSchedulePolicy.ScheduleRunTimes[0] = $sqlUtcTime
 $sqlretPol.FullBackupRetentionPolicy.IsDailyScheduleEnabled = $NULL # This has to be null, not false like the other scheduleenabled ones! Goodbye 2hrs figuring that out!
 $sqlretPol.FullBackupRetentionPolicy.DailySchedule = $NULL
-$sqlretPol.FullBackupRetentionPolicy.WeeklySchedule.DurationCountInWeeks = "4"
-$sqlretPol.FullBackupRetentionPolicy.WeeklySchedule.DaysOfTheWeek = "Sunday"
-$sqlretPol.FullBackupRetentionPolicy.MonthlySchedule.DurationCountInMonths = "12"
-$sqlretPol.FullBackupRetentionPolicy.MonthlySchedule.RetentionScheduleFormatType = "Weekly"
+$sqlretPol.FullBackupRetentionPolicy.WeeklySchedule.DurationCountInWeeks = $sqlWeeklyCount
+$sqlretPol.FullBackupRetentionPolicy.WeeklySchedule.DaysOfTheWeek = $sqlFullBackupFrequencyDay
+$sqlretPol.FullBackupRetentionPolicy.MonthlySchedule.DurationCountInMonths = $sqlMonthlyCount
+$sqlretPol.FullBackupRetentionPolicy.MonthlySchedule.RetentionScheduleFormatType = $sqlFullBackupFrequency
 $sqlretPol.FullBackupRetentionPolicy.MonthlySchedule.RetentionScheduleDaily = $NULL
-$sqlretPol.FullBackupRetentionPolicy.MonthlySchedule.RetentionScheduleWeekly.DaysOfTheWeek = "Sunday"
-$sqlretPol.FullBackupRetentionPolicy.MonthlySchedule.RetentionScheduleWeekly.WeeksOfTheMonth = "First"
-$sqlretPol.FullBackupRetentionPolicy.YearlySchedule.DurationCountInYears = "2"
-$sqlretPol.FullBackupRetentionPolicy.YearlySchedule.RetentionScheduleFormatType = "Weekly"
-$sqlretPol.FullBackupRetentionPolicy.YearlySchedule.RetentionScheduleWeekly.DaysOfTheWeek = "Sunday"
-$sqlretPol.FullBackupRetentionPolicy.YearlySchedule.RetentionScheduleWeekly.WeeksOfTheMonth = "First"
-$sqlretPol.FullBackupRetentionPolicy.YearlySchedule.MonthsOfYear = "January"
-$sqlretPol.LogBackupRetentionPolicy.RetentionDurationType = "Days"
-$sqlretPol.LogBackupRetentionPolicy.RetentionCount = "15"
-$sqlschPol.IsDifferentialBackupEnabled = "True"
-$sqlschpol.DifferentialBackupSchedulePolicy.ScheduleRunFrequency = "Weekly"
+$sqlretPol.FullBackupRetentionPolicy.MonthlySchedule.RetentionScheduleWeekly.DaysOfTheWeek = $sqlFullBackupFrequencyDay
+$sqlretPol.FullBackupRetentionPolicy.MonthlySchedule.RetentionScheduleWeekly.WeeksOfTheMonth = $sqlFullBackupWeekOfMonth
+$sqlretPol.FullBackupRetentionPolicy.YearlySchedule.DurationCountInYears = $sqlYearlyCount
+$sqlretPol.FullBackupRetentionPolicy.YearlySchedule.RetentionScheduleFormatType = $sqlFullBackupFrequency
+$sqlretPol.FullBackupRetentionPolicy.YearlySchedule.RetentionScheduleWeekly.DaysOfTheWeek = $sqlFullBackupFrequencyDay
+$sqlretPol.FullBackupRetentionPolicy.YearlySchedule.RetentionScheduleWeekly.WeeksOfTheMonth = $sqlFullBackupWeekOfMonth
+$sqlretPol.FullBackupRetentionPolicy.YearlySchedule.MonthsOfYear = $sqlYearlyMonth
+$sqlschPol.IsDifferentialBackupEnabled = $sqlDifferentialEnabled
+$sqlschpol.DifferentialBackupSchedulePolicy.ScheduleRunFrequency = $sqlFullBackupFrequency
 $sqlschpol.DifferentialBackupSchedulePolicy.ScheduleRunDays = "Monday"
 $sqlschpol.DifferentialBackupSchedulePolicy.ScheduleRunDays += "Tuesday"
 $sqlschpol.DifferentialBackupSchedulePolicy.ScheduleRunDays += "Wednesday"
@@ -104,15 +127,15 @@ $sqlschpol.DifferentialBackupSchedulePolicy.ScheduleRunDays += "Thursday"
 $sqlschpol.DifferentialBackupSchedulePolicy.ScheduleRunDays += "Friday"
 $sqlschpol.DifferentialBackupSchedulePolicy.ScheduleRunDays += "Saturday"
 $sqlschpol.DifferentialBackupSchedulePolicy.ScheduleRunTimes[0] = $sqlUtcTime
-$sqlretpol.DifferentialBackupRetentionPolicy.RetentionDurationType = "Days"
-$sqlretpol.DifferentialBackupRetentionPolicy.RetentionCount = "7"
-$sqlschpol.IsLogBackupEnabled = "True"
-$sqlschpol.LogBackupSchedulePolicy.ScheduleFrequencyInMins = "120"
-$sqlretpol.LogBackupRetentionPolicy.RetentionCount = "7"
-$sqlretpol.LogBackupRetentionPolicy.RetentionDurationType = "Days"
+$sqlretPol.DifferentialBackupRetentionPolicy.RetentionDurationType = "Days"
+$sqlretPol.DifferentialBackupRetentionPolicy.RetentionCount = "7"
+$sqlschpol.IsLogBackupEnabled = $sqlLogBackupEnabled
+$sqlschpol.LogBackupSchedulePolicy.ScheduleFrequencyInMins = $sqlLogBackupFrequencyMins
+$sqlretPol.LogBackupRetentionPolicy.RetentionCount = $sqlLogRetentionCount
+$sqlretPol.LogBackupRetentionPolicy.RetentionDurationType = $sqlLogRetentionCycle
 
 # Create the SQL Backup Job
-$NewSQLPolicy = New-AzRecoveryServicesBackupProtectionPolicy -Name $sql_backup_policy_name -WorkloadType "MSSQL" -RetentionPolicy $sqlretPol -SchedulePolicy $sqlschPol -Verbose
+$NewSQLPolicy = New-AzRecoveryServicesBackupProtectionPolicy -Name $mySQLBackupPolicyName -WorkloadType "MSSQL" -RetentionPolicy $sqlretPol -SchedulePolicy $sqlschPol -Verbose
 
 # Get SQL VMs
 $sqlvms = Get-AzVM -ResourceGroupName $myRSG -Name *sql*
