@@ -6,6 +6,7 @@ Set-PoshPrompt -Theme hotstick.minimal
 Import-Module ~\Documents\Powershell\Get-AndyURLHealthCheck.psm1
 Set-PSReadLineOption -PredictionSource History
 
+# Creating some aliases for most commonly used commands
 function terraforminit { terraform init }
 function terraformvalidate { terraform validate }
 function terraformplan { terraform plan }
